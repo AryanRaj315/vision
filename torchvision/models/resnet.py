@@ -148,10 +148,23 @@ class ResNet(nn.Module):
                                        dilate=replace_stride_with_dilation[0])
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
                                        dilate=replace_stride_with_dilation[1])
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
-                                       dilate=replace_stride_with_dilation[2])
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        #The output of layer 3 goes as input to the 3 parallel layers.
+        self.layer4_p1 = self._make_layer(block, 512, layers[3], stride=2,
+                                        dilate=replace_stride_with_dilation[2])    
+        self.layer4_p2 = self._make_layer(block, 512, layers[3], stride=2,
+                                        dilate=replace_stride_with_dilation[2]) 
+        self.layer4_p3 = self._make_layer(block, 512, layers[3], stride=2,
+                                        dilate=replace_stride_with_dilation[2])   
+        self.avgpool_p1 = nn.AdaptiveAvgPool2d((1, 1))
+        self.avgpool_p2 = nn.AdaptiveAvgPool2d((1, 1))
+        self.avgpool_p3 = nn.AdaptiveAvgPool2d((1, 1))   
+        self.fc_p1 = nn.Linear(512 * block.expansion, num_classes)
+        self.fc_p2 = nn.Linear(512 * block.expansion, num_classes)
+        self.fc_p3 = nn.Linear(512 * block.expansion, num_classes)                      
+        # self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
+        #                                dilate=replace_stride_with_dilation[2])
+        # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        # self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -204,13 +217,31 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
+        
+        #creating seperate clones for each parallel layer
+        x1 = Variable(x.data.clone(), requires_grad=True)
+        x2 = Variable(x.data.clone(), requires_grad=True)
+        x3 = Variable(x.data.clone(), requires_grad=True)
 
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
+        #for parallel layer 1
+        x1 = self.layer4_p1(x1)
+        x1 = self.avgpool(x1)
+        x1 = torch.flatten(x1, 1)
+        x1 = self.fc(x1)
 
-        return x
+        #for parallel layer 2
+        x2 = self.layer4_p2(x2)
+        x2 = self.avgpool(x2)
+        x2 = torch.flatten(x2, 1)
+        x2 = self.fc(x2)
+
+        #for parallel layer 3
+        x3 = self.layer4_p3(x3)
+        x3 = self.avgpool(x3)
+        x3 = torch.flatten(x3, 1)
+        x3 = self.fc(x3) 
+
+        return x1, x2, x3
 
     def forward(self, x):
         return self._forward_impl(x)
