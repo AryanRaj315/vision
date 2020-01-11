@@ -1,4 +1,5 @@
 import torch
+from torch.autograd import Variable
 import torch.nn as nn
 from .utils import load_state_dict_from_url
 
@@ -154,13 +155,13 @@ class ResNet(nn.Module):
         self.layer4_p2 = self._make_layer(block, 512, layers[3], stride=2,
                                         dilate=replace_stride_with_dilation[2]) 
         self.layer4_p3 = self._make_layer(block, 512, layers[3], stride=2,
-                                        dilate=replace_stride_with_dilation[2])   
+                                        dilate=replace_stride_with_dilation[2])
         self.avgpool_p1 = nn.AdaptiveAvgPool2d((1, 1))
         self.avgpool_p2 = nn.AdaptiveAvgPool2d((1, 1))
         self.avgpool_p3 = nn.AdaptiveAvgPool2d((1, 1))   
         self.fc_p1 = nn.Linear(512 * block.expansion, num_classes)
         self.fc_p2 = nn.Linear(512 * block.expansion, num_classes)
-        self.fc_p3 = nn.Linear(512 * block.expansion, num_classes)                      
+        self.fc_p3 = nn.Linear(512 * block.expansion, num_classes)               
         # self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
         #                                dilate=replace_stride_with_dilation[2])
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -183,7 +184,7 @@ class ResNet(nn.Module):
                 elif isinstance(m, BasicBlock):
                     nn.init.constant_(m.bn2.weight, 0)
 
-    def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
+    def _make_layer(self, block, planes, blocks, stride=1, dilate=False, check = False):
         norm_layer = self._norm_layer
         downsample = None
         previous_dilation = self.dilation
@@ -220,26 +221,25 @@ class ResNet(nn.Module):
         
         #creating seperate clones for each parallel layer
         x1 = Variable(x.data.clone(), requires_grad=True)
-        x2 = Variable(x.data.clone(), requires_grad=True)
-        x3 = Variable(x.data.clone(), requires_grad=True)
-
         #for parallel layer 1
         x1 = self.layer4_p1(x1)
-        x1 = self.avgpool(x1)
+        x1 = self.avgpool_p1(x1)
         x1 = torch.flatten(x1, 1)
-        x1 = self.fc(x1)
+        x1 = self.fc_p1(x1)
 
+        x2 = Variable(x.data.clone(), requires_grad=True)
         #for parallel layer 2
         x2 = self.layer4_p2(x2)
-        x2 = self.avgpool(x2)
+        x2 = self.avgpool_p2(x2)
         x2 = torch.flatten(x2, 1)
-        x2 = self.fc(x2)
+        x2 = self.fc_p2(x2)
 
+        x3 = Variable(x.data.clone(), requires_grad=True)
         #for parallel layer 3
         x3 = self.layer4_p3(x3)
-        x3 = self.avgpool(x3)
+        x3 = self.avgpool_p3(x3)
         x3 = torch.flatten(x3, 1)
-        x3 = self.fc(x3) 
+        x3 = self.fc_p3(x3) 
 
         return x1, x2, x3
 
