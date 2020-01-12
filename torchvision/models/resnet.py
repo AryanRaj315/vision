@@ -57,7 +57,7 @@ class BasicBlock(nn.Module):
 
     def forward(self, x):
         identity = x
-
+#         print(
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -120,7 +120,7 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
+    def __init__(self, block, layers, num_classes=1, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
                  norm_layer=None):
         super(ResNet, self).__init__()
@@ -150,24 +150,17 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
                                        dilate=replace_stride_with_dilation[1])
         #The output of layer 3 goes as input to the 3 parallel layers.
-        self.layer4_p1 = self._make_layer(block, 512, layers[3], stride=2,
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
                                         dilate=replace_stride_with_dilation[2])    
-        self.layer4_p2 = self._make_layer(block, 512, layers[3], stride=2,
-                                        dilate=replace_stride_with_dilation[2]) 
-        self.layer4_p3 = self._make_layer(block, 512, layers[3], stride=2,
-                                        dilate=replace_stride_with_dilation[2])
-        self.avgpool_p1 = nn.AdaptiveAvgPool2d((1, 1))
-        self.avgpool_p2 = nn.AdaptiveAvgPool2d((1, 1))
-        self.avgpool_p3 = nn.AdaptiveAvgPool2d((1, 1))   
-        self.fc_p1 = nn.Linear(512 * block.expansion, num_classes)
-        self.fc_p2 = nn.Linear(512 * block.expansion, num_classes)
-        self.fc_p3 = nn.Linear(512 * block.expansion, num_classes)               
+        self.avgpool= nn.AdaptiveAvgPool2d((1, 1))  
+        self.fc = nn.Linear(512 * block.expansion, num_classes)              
         # self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
         #                                dilate=replace_stride_with_dilation[2])
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         for m in self.modules():
+#             print(m)
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
@@ -222,24 +215,24 @@ class ResNet(nn.Module):
         #creating seperate clones for each parallel layer
         x1 = Variable(x.data.clone(), requires_grad=True)
         #for parallel layer 1
-        x1 = self.layer4_p1(x1)
-        x1 = self.avgpool_p1(x1)
+        x1 = self.layer4(x1)
+        x1 = self.avgpool(x1)
         x1 = torch.flatten(x1, 1)
-        x1 = self.fc_p1(x1)
+        x1 = self.fc(x1)
 
         x2 = Variable(x.data.clone(), requires_grad=True)
         #for parallel layer 2
-        x2 = self.layer4_p2(x2)
-        x2 = self.avgpool_p2(x2)
+        x2 = self.layer4(x2)
+        x2 = self.avgpool(x2)
         x2 = torch.flatten(x2, 1)
-        x2 = self.fc_p2(x2)
+        x2 = self.fc(x2)
 
         x3 = Variable(x.data.clone(), requires_grad=True)
         #for parallel layer 3
-        x3 = self.layer4_p3(x3)
-        x3 = self.avgpool_p3(x3)
+        x3 = self.layer4(x3)
+        x3 = self.avgpool(x3)
         x3 = torch.flatten(x3, 1)
-        x3 = self.fc_p3(x3) 
+        x3 = self.fc(x3) 
 
         return x1, x2, x3
 
@@ -248,7 +241,9 @@ class ResNet(nn.Module):
 
 
 def _resnet(arch, block, layers, pretrained, progress, **kwargs):
+    print(block)
     model = ResNet(block, layers, **kwargs)
+    
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
