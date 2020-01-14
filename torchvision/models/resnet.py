@@ -129,6 +129,7 @@ class ResNet(nn.Module):
         self._norm_layer = norm_layer
 
         self.inplanes = 64
+        self.prev = self.inplanes
         self.dilation = 1
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
@@ -151,33 +152,42 @@ class ResNet(nn.Module):
                                        dilate=replace_stride_with_dilation[1])
         #The output of layer 3 goes as input to the 3 parallel layers.
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
-                                        dilate=replace_stride_with_dilation[2])    
+                                        dilate=replace_stride_with_dilation[2])   
+        self.layer4_p2 = self._make_layer(block, 512, layers[3], stride=2,
+                                        dilate=replace_stride_with_dilation[2], check = False)
+        self.layer4_p3 = self._make_layer(block, 512, layers[3], stride=2,
+                                        dilate=replace_stride_with_dilation[2],check = False)  
         self.avgpool= nn.AdaptiveAvgPool2d((1, 1))  
-        self.fc = nn.Linear(512 * block.expansion, num_classes)              
+        self.avgpool_p2= nn.AdaptiveAvgPool2d((1, 1))  
+        self.avgpool_p3= nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512 * block.expansion, num_classes) 
+        self.fc_p2 = nn.Linear(512 * block.expansion, num_classes) 
+        self.fc_p3 = nn.Linear(512 * block.expansion, num_classes) 
+        
         # self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
         #                                dilate=replace_stride_with_dilation[2])
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
 
-        for m in self.modules():
-#             print(m)
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
+#         for m in self.modules():
+# #             print(m)
+#             if isinstance(m, nn.Conv2d):
+#                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+#             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+#                 nn.init.constant_(m.weight, 1)
+#                 nn.init.constant_(m.bias, 0)
 
-        # Zero-initialize the last BN in each residual branch,
-        # so that the residual branch starts with zeros, and each residual block behaves like an identity.
-        # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
-        if zero_init_residual:
-            for m in self.modules():
-                if isinstance(m, Bottleneck):
-                    nn.init.constant_(m.bn3.weight, 0)
-                elif isinstance(m, BasicBlock):
-                    nn.init.constant_(m.bn2.weight, 0)
+#         # Zero-initialize the last BN in each residual branch,
+#         # so that the residual branch starts with zeros, and each residual block behaves like an identity.
+#         # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
+#         if zero_init_residual:
+#             for m in self.modules():
+#                 if isinstance(m, Bottleneck):
+#                     nn.init.constant_(m.bn3.weight, 0)
+#                 elif isinstance(m, BasicBlock):
+#                     nn.init.constant_(m.bn2.weight, 0)
 
-    def _make_layer(self, block, planes, blocks, stride=1, dilate=False, check = False):
+    def _make_layer(self, block, planes, blocks, stride=1, dilate=False, check = True):
         norm_layer = self._norm_layer
         downsample = None
         previous_dilation = self.dilation
@@ -193,7 +203,11 @@ class ResNet(nn.Module):
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample, self.groups,
                             self.base_width, previous_dilation, norm_layer))
-        self.inplanes = planes * block.expansion
+        if check:
+            self.inplanes = planes * block.expansion
+            self.prev = self.inplanes
+        else:
+            self.inplanes = self.prev    
         for _ in range(1, blocks):
             layers.append(block(self.inplanes, planes, groups=self.groups,
                                 base_width=self.base_width, dilation=self.dilation,
@@ -214,20 +228,21 @@ class ResNet(nn.Module):
         
         #creating seperate clones for each parallel layer
         x1 = Variable(x.data.clone(), requires_grad=True)
+        x2 = Variable(x.data.clone(), requires_grad=True)
+        x3 = Variable(x.data.clone(), requires_grad=True)
+        
         #for parallel layer 1
         x1 = self.layer4(x1)
         x1 = self.avgpool(x1)
         x1 = torch.flatten(x1, 1)
         x1 = self.fc(x1)
-
-        x2 = Variable(x.data.clone(), requires_grad=True)
+        
         #for parallel layer 2
         x2 = self.layer4(x2)
         x2 = self.avgpool(x2)
         x2 = torch.flatten(x2, 1)
         x2 = self.fc(x2)
 
-        x3 = Variable(x.data.clone(), requires_grad=True)
         #for parallel layer 3
         x3 = self.layer4(x3)
         x3 = self.avgpool(x3)
